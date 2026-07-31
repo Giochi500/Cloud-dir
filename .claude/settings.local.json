@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init *)",
+      "PowerShell(Rename-Item -Path \"C:\\\\Users\\\\Legion\\\\OneDrive\\\\Desktop\\\\New folder\" -NewName \"Cloud-dir\" -Force)",
+      "Bash(git remote *)",
+      "Bash(git branch *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git config *)"
+    ]
+  }
+}
