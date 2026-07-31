@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salary Management System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 20px;
+            padding: 20px 30px;
+            background: #f8f9fa;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .month-selector {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        select {
+            padding: 10px 15px;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+            font-size: 1em;
+            cursor: pointer;
+            background: white;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 5px rgba(102, 126, 234, 0.3);
+        }
+
+        .table-container {
+            overflow-x: auto;
+            padding: 20px 30px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95em;
+        }
+
+        th {
+            background: #667eea;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .editable {
+            background: #fff3cd;
+            padding: 8px 12px;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .editable:hover {
+            background: #ffe69c;
+            border-color: #ff9800;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 2px solid #667eea;
+            border-radius: 4px;
+            font-size: 0.95em;
+        }
+
+        .btn-save {
+            background: #28a745;
+            color: white;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-save:hover {
+            background: #218838;
+        }
+
+        .btn-cancel {
+            background: #dc3545;
+            color: white;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 30px;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 30px;
+        }
+
+        footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            border-top: 1px solid #e9ecef;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💰 Salary Management System</h1>
+            <p>Manage employee salaries efficiently</p>
+        </header>
+
+        <div class="controls">
+            <div class="month-selector">
+                <label for="monthSelect">Select Month:</label>
+                <select id="monthSelect">
+                    <option value="">Loading months...</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="searchInput" placeholder="Search all columns..." style="padding: 10px 15px; border: 2px solid #667eea; border-radius: 5px; width: 250px;">
+                <button id="searchBtn" style="padding: 10px 15px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600;">Search</button>
+                <button id="clearFilters" style="padding: 10px 15px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600;">Clear All</button>
+            </div>
+        </div>
+
+        <div id="message"></div>
+        <div id="content" class="table-container">
+            <div class="loading">Loading data...</div>
+        </div>
+
+        <footer>
+            <p>Salary API v1.0 | Last updated: <span id="timestamp">--</span></p>
+        </footer>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        let currentMonth = null;
+        let currentData = [];
+        let originalData = [];
+        let activeFilters = {};
+        let editingCell = null;
+
+        const columns = [
+          { key: 'id', label: 'ID', filterable: false },
+          { key: '__EMPTY_4', label: 'სახელი', filterable: true },
+          { key: '__EMPTY_3', label: 'სამუშაო ადგილი', filterable: true },
+          { key: '__EMPTY_5', label: 'თანამდებობა', filterable: true },
+          { key: '__EMPTY_8', label: 'ავანსი', filterable: false },
+          { key: '__EMPTY_10', label: 'ხელფასი NET', filterable: false },
+          { key: '__EMPTY_12', label: 'დანამატი', filterable: false }
+        ];
+
+        // Load available months
+        async function loadMonths() {
+            try {
+                const res = await fetch(`${API_URL}/months`);
+                const months = await res.json();
+
+                const select = document.getElementById('monthSelect');
+                select.innerHTML = '';
+
+                months.forEach(month => {
+                    const option = document.createElement('option');
+                    option.value = month;
+                    option.textContent = month;
+                    select.appendChild(option);
+                });
+
+                if (months.length > 0) {
+                    select.value = months[months.length - 1]; // Select latest month
+                    loadSalaryData(months[months.length - 1]);
+                }
+            } catch (err) {
+                showError('Failed to load months: ' + err.message);
+            }
+        }
+
+        // Load unique positions for filter
+        async function loadPositions() {
+            try {
+                const res = await fetch(`${API_URL}/positions`);
+                const positions = await res.json();
+
+                const select = document.getElementById('positionFilter');
+                positions.forEach(pos => {
+                    const option = document.createElement('option');
+                    option.value = pos;
+                    option.textContent = pos;
+                    select.appendChild(option);
+                });
+            } catch (err) {
+                console.error('Failed to load positions:', err);
+            }
+        }
+
+        // Load salary data for selected month
+        async function loadSalaryData(month) {
+            try {
+                currentMonth = month;
+                const content = document.getElementById('content');
+                content.innerHTML = '<div class="loading">Loading salary data...</div>';
+
+                const res = await fetch(`${API_URL}/salary/${month}`);
+                const data = await res.json();
+
+                if (!data || data.length === 0) {
+                    content.innerHTML = '<div class="error">No salary data found for this month</div>';
+                    return;
+                }
+
+                originalData = data;
+                currentData = data;
+                activeFilters = {};
+                renderTable(currentData);
+                document.getElementById('timestamp').textContent = new Date().toLocaleString();
+            } catch (err) {
+                showError('Failed to load salary data: ' + err.message);
+            }
+        }
+
+        // Get unique values for a column
+        function getUniqueValues(col) {
+            return [...new Set(originalData
+                .map(emp => emp[col])
+                .filter(Boolean)
+            )].sort();
+        }
+
+        // Render salary table with column filters
+        function renderTable(data) {
+            const content = document.getElementById('content');
+
+            let html = '<table><thead><tr>';
+
+            // Header row with filters
+            columns.forEach(col => {
+                let header = `<th><div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>${col.label}</span>`;
+
+                if (col.filterable) {
+                    const uniqueValues = getUniqueValues(col.key);
+                    header += `<div style="position: relative; display: inline-block;">
+                        <button onclick="toggleFilterDropdown('${col.key}')" style="background: none; border: none; cursor: pointer; font-size: 1.2em;">⬇️</button>
+                        <div id="filter-${col.key}" class="filter-dropdown" style="display: none; position: absolute; top: 100%; right: 0; background: white; border: 1px solid #ccc; border-radius: 4px; padding: 5px; z-index: 10; min-width: 150px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+                            <button onclick="clearColumnFilter('${col.key}')" style="width: 100%; text-align: left; padding: 8px; background: #f8f9fa; border: none; cursor: pointer; font-weight: 600; margin-bottom: 5px;">Clear</button>`;
+
+                    uniqueValues.forEach(val => {
+                        header += `<label style="display: block; padding: 5px; cursor: pointer;">
+                            <input type="checkbox" value="${val}" onchange="applyColumnFilter('${col.key}', this.value, this.checked)">
+                            ${val}
+                        </label>`;
+                    });
+
+                    header += `</div></div>`;
+                }
+
+                header += `</div></th>`;
+                html += header;
+            });
+
+            html += '</tr></thead><tbody>';
+
+            // Data rows
+            data.forEach((emp, idx) => {
+                html += '<tr>';
+                columns.forEach((col, cidx) => {
+                    let value;
+                    if (col.key === 'id') {
+                        value = idx + 1;
+                    } else {
+                        value = emp[col.key] || 'N/A';
+                    }
+
+                    if (col.label === 'ავანსი' || col.label === 'ხელფასი NET' || col.label === 'დანამატი') {
+                        const fieldMap = { 'ავანსი': '__EMPTY_8', 'ხელფასი NET': '__EMPTY_10', 'დანამატი': '__EMPTY_12' };
+                        html += `<td class="editable" onclick="editCell(this, ${idx}, '${col.label}')">${value}</td>`;
+                    } else {
+                        html += `<td>${value}</td>`;
+                    }
+                });
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            content.innerHTML = html;
+        }
+
+        function toggleFilterDropdown(colKey) {
+            const dropdown = document.getElementById(`filter-${colKey}`);
+            dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function applyColumnFilter(colKey, value, isChecked) {
+            if (!activeFilters[colKey]) {
+                activeFilters[colKey] = [];
+            }
+
+            if (isChecked) {
+                if (!activeFilters[colKey].includes(value)) {
+                    activeFilters[colKey].push(value);
+                }
+            } else {
+                activeFilters[colKey] = activeFilters[colKey].filter(v => v !== value);
+            }
+
+            applyAllFilters();
+        }
+
+        function clearColumnFilter(colKey) {
+            activeFilters[colKey] = [];
+            applyAllFilters();
+            document.getElementById(`filter-${colKey}`).style.display = 'none';
+        }
+
+        function applyAllFilters() {
+            let filtered = [...originalData];
+
+            Object.keys(activeFilters).forEach(colKey => {
+                if (activeFilters[colKey].length > 0) {
+                    filtered = filtered.filter(emp =>
+                        activeFilters[colKey].includes(emp[colKey])
+                    );
+                }
+            });
+
+            renderTable(filtered);
+        }
+
+        function searchAllColumns() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+
+            if (!searchTerm) {
+                applyAllFilters();
+                return;
+            }
+
+            let filtered = [...originalData].filter(emp => {
+                return columns.some(col => {
+                    const value = String(emp[col.key] || '').toLowerCase();
+                    return value.includes(searchTerm);
+                });
+            });
+
+            renderTable(filtered);
+        }
+
+        // Edit cell functionality
+        function editCell(cell, rowIdx, fieldName) {
+            if (editingCell) return;
+
+            const currentValue = cell.textContent;
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.value = currentValue;
+            input.style.width = '100%';
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'btn-save';
+            saveBtn.textContent = 'Save';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'btn-cancel';
+            cancelBtn.textContent = 'Cancel';
+
+            cell.innerHTML = '';
+            cell.appendChild(input);
+            cell.appendChild(saveBtn);
+            cell.appendChild(cancelBtn);
+
+            input.focus();
+            editingCell = cell;
+
+            saveBtn.onclick = async () => {
+                const newValue = parseFloat(input.value);
+
+                // Save to API
+                try {
+                    const res = await fetch(`${API_URL}/salary/${currentMonth}/${rowIdx + 1}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            [fieldName]: newValue
+                        })
+                    });
+
+                    if (res.ok) {
+                        showSuccess('Data saved successfully!');
+                        cell.textContent = newValue;
+                        editingCell = null;
+                    } else {
+                        showError('Failed to save data');
+                    }
+                } catch (err) {
+                    showError('Error: ' + err.message);
+                }
+            };
+
+            cancelBtn.onclick = () => {
+                cell.textContent = currentValue;
+                editingCell = null;
+            };
+        }
+
+        // Show message
+        function showMessage(message, type) {
+            const div = document.getElementById('message');
+            div.textContent = message;
+            div.className = type;
+            setTimeout(() => {
+                div.textContent = '';
+                div.className = '';
+            }, 3000);
+        }
+
+        function showError(msg) {
+            showMessage(msg, 'error');
+        }
+
+        function showSuccess(msg) {
+            showMessage(msg, 'success');
+        }
+
+        // Event listeners
+        document.getElementById('monthSelect').addEventListener('change', (e) => {
+            if (e.target.value) {
+                loadSalaryData(e.target.value);
+            }
+        });
+
+        document.getElementById('clearFilters').addEventListener('click', () => {
+            activeFilters = {};
+            document.getElementById('searchInput').value = '';
+            renderTable(originalData);
+        });
+
+        document.getElementById('searchBtn').addEventListener('click', searchAllColumns);
+
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                searchAllColumns();
+            }
+        });
+
+        // Initialize
+        loadMonths();
+    </script>
+</body>
+</html>
