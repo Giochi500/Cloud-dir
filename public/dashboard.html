@@ -32,12 +32,46 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-content {
             text-align: center;
+            flex: 1;
         }
 
         h1 {
             font-size: 2.5em;
             margin-bottom: 10px;
+        }
+
+        .user-info {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .user-details {
+            text-align: right;
+            font-size: 14px;
+        }
+
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid white;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: white;
+            color: #667eea;
         }
 
         .controls {
@@ -212,8 +246,17 @@
 <body>
     <div class="container">
         <header>
-            <h1>💰 Salary Management System</h1>
-            <p>Manage employee salaries efficiently</p>
+            <div class="header-content">
+                <h1>💰 Salary Management System</h1>
+                <p>Manage employee salaries efficiently</p>
+            </div>
+            <div class="user-info">
+                <div class="user-details">
+                    <div id="userName">Loading...</div>
+                    <div id="userRole" style="font-size: 12px; opacity: 0.8;"></div>
+                </div>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
         </header>
 
         <div class="controls">
@@ -307,6 +350,42 @@
         let activeFilters = {};
         let editingCell = null;
 
+        // Get token from localStorage
+        function getToken() {
+            return localStorage.getItem('token');
+        }
+
+        // Make authenticated API call
+        async function apiCall(url, options = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getToken()}`,
+                ...options.headers
+            };
+            return fetch(url, { ...options, headers });
+        }
+
+        // Load user info
+        async function loadUserInfo() {
+            try {
+                const res = await fetch(`${API_URL}/user`);
+                const data = await res.json();
+                if (res.ok) {
+                    document.getElementById('userName').textContent = `${data.user.username}`;
+                    document.getElementById('userRole').textContent = `Role: ${data.user.role}`;
+                }
+            } catch (err) {
+                console.error('Error loading user info:', err);
+            }
+        }
+
+        // Logout
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login.html';
+        }
+
         const columns = [
           { key: 'id', label: 'ID', filterable: false },
           { key: '__EMPTY_4', label: 'სახელი', filterable: true },
@@ -323,8 +402,14 @@
         // Load available months
         async function loadMonths() {
             try {
+                console.log('Token:', getToken());
                 const res = await fetch(`${API_URL}/months`);
+                console.log('Response status:', res.status, 'ok:', res.ok);
+                if (!res.ok) {
+                    throw new Error(`Error ${res.status}: ${res.statusText}`);
+                }
                 const months = await res.json();
+                console.log('Months data:', months);
 
                 const select = document.getElementById('monthSelect');
                 select.innerHTML = '';
@@ -371,6 +456,9 @@
                 content.innerHTML = '<div class="loading">Loading salary data...</div>';
 
                 const res = await fetch(`${API_URL}/salary/${month}`);
+                if (!res.ok) {
+                    throw new Error(`Error ${res.status}: ${res.statusText}`);
+                }
                 const data = await res.json();
 
                 if (!data || data.length === 0) {
@@ -821,6 +909,7 @@
         document.getElementById('addEmployeeForm').addEventListener('submit', saveNewEmployee);
 
         // Initialize
+        loadUserInfo();
         loadMonths();
     </script>
 </body>

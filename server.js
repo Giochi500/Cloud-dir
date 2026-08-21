@@ -3,13 +3,67 @@ const XLSX = require('xlsx');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const { Pool } = require('pg');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-const SALARY_DIR = 'C:\\Users\\Legion\\OneDrive\\Desktop\\ხელფასებისთვის';
+const SALARY_DIR = path.join(__dirname, 'data');
+
+// PostgreSQL connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
+// Initialize database
+async function initDatabase() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'manager', 'hr')),
+        department VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Database initialized');
+  } catch (err) {
+    console.error('Error initializing database:', err);
+  }
+}
+
+initDatabase();
+
+// JWT middleware
+function verifyToken(req, res, next) {
+  const token = req.headers['authorization']?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token provided' });
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) return res.status(401).json({ error: 'Invalid token' });
+    req.user = decoded;
+    next();
+  });
+}
+
+// Role check middleware
+function checkRole(roles) {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    next();
+  };
+}
 
 // Helper: Get all salary files by month
 function getSalaryFiles() {
@@ -73,6 +127,70 @@ function writeExcelFile(filePath, data, headers) {
     return false;
   }
 }
+
+// POST: Register new user
+app.post('/api/register', async (req, res) => {
+  try {
+    const { username, email, password, role, department } = req.body;
+
+    if (!username || !email || !password || !role) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+      'INSERT INTO users (username, email, password, role, department) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, email, role',
+      [username, email, hashedPassword, role, department || null]
+    );
+
+    res.json({ success: true, user: result.rows[0] });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'Username or email already exists' });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST: Login
+app.post('/api/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password required' });
+    }
+
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const user = result.rows[0];
+    const validPassword = await bcrypt.compare(password, user.password);
+
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role, department: user.department },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({ success: true, token, user: { id: user.id, username: user.username, role: user.role } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET: Current user
+app.get('/api/user', (req, res) => {
+  res.json({ user: req.user });
+});
 
 // GET: List all employees
 app.get('/api/employees', (req, res) => {
@@ -149,7 +267,105 @@ app.get('/api/positions', (req, res) => {
   }
 });
 
-// PUT: Update salary entry for employee
+// POST: Add new employee (admin, hr only)
+app.post('/api/add-employee/:month', (req, res) => {
+  try {
+    const { month } = req.params;
+    const { name, position, location, department, personalId, contractType, salary } = req.body;
+
+    const files = getSalaryFiles();
+    if (!files[month]) {
+      return res.status(404).json({ error: `No data for month ${month}` });
+    }
+
+    const filePath = files[month];
+    const data = readExcelFile(filePath);
+
+    // Create new employee object matching Excel structure
+    const newEmployee = {
+      '__EMPTY': department,
+      '__EMPTY_1': 'შპს მეგა ჰოლდინგი',
+      '__EMPTY_2': contractType,
+      '__EMPTY_3': location,
+      '__EMPTY_4': name,
+      '__EMPTY_5': position,
+      '__EMPTY_6': personalId,
+      '__EMPTY_7': 'საპენსიოს გარეშე',
+      '__EMPTY_8': 0,
+      '__EMPTY_9': 0,
+      '__EMPTY_10': salary,
+      '__EMPTY_11': 0,
+      '__EMPTY_12': 0,
+      '__EMPTY_13': 0,
+      '__EMPTY_14': 0,
+      '__EMPTY_15': 0,
+      '__EMPTY_16': salary,
+      '__EMPTY_17': 0,
+      '__EMPTY_18': 0,
+      '__EMPTY_19': 0,
+      '__EMPTY_20': 0,
+      '__EMPTY_21': 0,
+      '__EMPTY_22': 0,
+      '__EMPTY_23': '',
+      '__EMPTY_24': ''
+    };
+
+    data.push(newEmployee);
+
+    // Get headers
+    const headers = data.length > 0 ? Object.keys(data[0]) : [];
+
+    // Write back to Excel
+    const rows = data.map(emp => headers.map(h => emp[h]));
+    const workbook = XLSX.readFile(filePath);
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    workbook.Sheets[workbook.SheetNames[0]] = worksheet;
+    XLSX.writeFile(workbook, filePath);
+
+    res.json({ success: true, message: 'Employee added successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE: Delete employee (admin, hr only)
+app.delete('/api/delete-employee/:month/:employeeId', (req, res) => {
+  try {
+    const { month, employeeId } = req.params;
+    const empIdx = parseInt(employeeId) - 1;
+
+    const files = getSalaryFiles();
+    if (!files[month]) {
+      return res.status(404).json({ error: `No data for month ${month}` });
+    }
+
+    const filePath = files[month];
+    const data = readExcelFile(filePath);
+
+    if (empIdx < 0 || empIdx >= data.length) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    // Remove employee from array
+    data.splice(empIdx, 1);
+
+    // Get headers
+    const headers = data.length > 0 ? Object.keys(data[0]) : [];
+
+    // Write back to Excel
+    const rows = data.map(emp => headers.map(h => emp[h]));
+    const workbook = XLSX.readFile(filePath);
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    workbook.Sheets[workbook.SheetNames[0]] = worksheet;
+    XLSX.writeFile(workbook, filePath);
+
+    res.json({ success: true, message: 'Employee deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT: Update salary entry for employee (admin, hr only)
 app.put('/api/salary/:month/:employeeId', (req, res) => {
   try {
     const { month, employeeId } = req.params;
@@ -192,7 +408,7 @@ app.put('/api/salary/:month/:employeeId', (req, res) => {
 
 // Serve index.html for root
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
 const PORT = process.env.PORT || 3000;

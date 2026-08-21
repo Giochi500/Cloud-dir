@@ -8,7 +8,16 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(git config *)"
+      "Bash(git config *)",
+      "Bash(ls -lah \"C:\\\\Users\\\\Legion\\\\OneDrive\\\\Desktop\\\\ხელფასებისთვის\" 2>&1 | head -20)",
+      "Read(//c/Users/Legion/AppData/Roaming/Claude/local-agent-mode-sessions/skills-plugin/8f66ee60-c6f0-40b7-bd64-dd92b0e013ed/a2283c57-4137-4820-901c-e95d29324753/skills/xlsx/**)",
+      "Bash(markitdown \"C:\\\\Users\\\\Legion\\\\OneDrive\\\\Desktop\\\\ხელფასებისთვის\\\\2026.06\\\\ივნისის_ხელფასები_სტანდარტიზებული.xlsx\")",
+      "Bash(python3)",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "PowerShell(npm init -y)",
+      "Bash(copy \"D:\\\\Cloude-dir\\\\public\\\\index.html\" \"D:\\\\Cloude-dir\\\\public\\\\dashboard.html\")",
+      "PowerShell(Copy-Item \"D:\\\\Cloude-dir\\\\public\\\\index.html\" \"D:\\\\Cloude-dir\\\\public\\\\dashboard.html\")"
     ]
   }
 }
