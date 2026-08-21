@@ -13,7 +13,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-const SALARY_DIR = path.join(__dirname, 'data');
+const SALARY_DIR = 'C:\\Users\\Legion\\OneDrive\\დოკუმენტები\\My app\\data';
 
 // PostgreSQL connection
 const pool = new Pool({
